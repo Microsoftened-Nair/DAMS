@@ -116,8 +116,18 @@ class Phase1Orchestrator:
             all_pass = all_pass and ok
 
         if all_pass:
-            subprocess.run(["git", "tag", "-f", "v1.0.0-baseline"], cwd=str(self.root))
-            self.log("[P1] All units green. Tagged v1.0.0-baseline. Phase 1 complete.")
+            # Commit all project files before tagging — otherwise the baseline
+            # (and any push to a remote) contains an empty tree.
+            subprocess.run(["git", "add", "-A"], cwd=str(self.root),
+                           capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m",
+                 "feat: Phase 1 baseline — all units green"],
+                cwd=str(self.root), capture_output=True)
+            subprocess.run(["git", "tag", "-f", "v1.0.0-baseline"],
+                           cwd=str(self.root))
+            self.log("[P1] All units green. Committed + tagged v1.0.0-baseline. "
+                     "Phase 1 complete.")
         else:
             self.log("[P1] Some units failed after arbitration; see logs.")
         return all_pass

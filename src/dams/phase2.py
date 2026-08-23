@@ -84,6 +84,12 @@ class Phase2Pipeline:
                 self.log(f"[P2] repo creation failed: {(out + err).strip()[:300]}")
                 return False
         ok, out, _ = sh("git push -u origin HEAD --tags", self.root)
+        # Sanity check: remote must actually contain project files, not just
+        # an empty init commit.
+        ok_ls, files, _ = sh("git ls-tree -r --name-only HEAD | head -3", self.root)
+        if not (ok_ls and files.strip()):
+            sh("git add -A && git commit -m 'feat: Phase 1 baseline' && "
+               "git push -u origin HEAD --tags", self.root)
         self.log(f"[P2] remote ready: {out.strip()[:120] if ok else 'push warning'}")
         return self.has_remote()
 
