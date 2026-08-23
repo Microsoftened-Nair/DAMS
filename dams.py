@@ -12,14 +12,15 @@ from dams.phase2 import Phase2Pipeline              # noqa: E402
 
 def main():
     ap = argparse.ArgumentParser(prog="dams")
+    ap.add_argument("--root", default=".", help="project root (global flag)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p1 = sub.add_parser("phase1", help="Greenfield build")
-    p1.add_argument("--root", default=".")
+    p1.add_argument("--root", default=None)
     p1.add_argument("goal")
 
     p2 = sub.add_parser("phase2", help="Maintenance pipeline")
-    p2.add_argument("--root", default=".")
+    p2.add_argument("--root", default=None)
     p2.add_argument("--dry-run", action="store_true")
     p2.add_argument("--cycles", type=int, default=1)
     p2.add_argument("--issues", type=int, default=None,
@@ -27,8 +28,16 @@ def main():
 
     sub.add_parser("smoke", help="Run framework self-test (no LLM calls)")
 
+    sv = sub.add_parser("serve", help="Phase 2 service: start/stop/status")
+    sv.add_argument("--root", default=None)
+    sv.add_argument("action", choices=["start", "stop", "status"])
+    sv.add_argument("--force", action="store_true", help="stop: kill immediately")
+    sv.add_argument("--issues", type=int, help="start: stop after N issue lifecycles")
+    sv.add_argument("--cycles", type=int, help="start: run N cycles")
+    sv.add_argument("--dry-run", action="store_true")
+
     args = ap.parse_args()
-    root = Path(args.root if hasattr(args, "root") else ".").resolve()
+    root = Path(getattr(args, "root", None) or ".").resolve()
 
     if args.cmd == "phase1":
         ok = Phase1Orchestrator(root).run(args.goal)
@@ -43,7 +52,23 @@ def main():
                 print(f"=== Phase 2 cycle {i+1}/{args.cycles} ===")
                 res = pipe.run_once()
                 print(res)
-    else:
+    elif args.cmd == "serve":
+        from dams.controller import start, stop, status
+        if args.action == "start":
+            ok = start(root, issues=args.issues, cycles=args.cycles,
+                       dry_run=args.dry_run)
+            sys.exit(0 if ok else 1)
+        elif args.action == "stop":
+            sys.exit(0 if stop(root, force=args.force) else 1)
+        else:
+            st = status(root)
+            print(f"running: {st['running']}  pid: {st['pid']}  "
+                  f"stop_requested: {st['stop_requested']}")
+            print(f"log: {st['log']}")
+            if st["recent_log"]:
+                print("--- recent ---")
+                print(st["recent_log"])
+    elif args.cmd == "smoke":
         from dams.smoke_test import run as smoke
         smoke(root)
 
