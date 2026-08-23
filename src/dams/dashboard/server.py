@@ -292,8 +292,10 @@ async def ws_endpoint(websocket: WebSocket, token: str = ""):
         _ws_clients.discard(websocket)
 
 
-@app.get("/", dependencies=[Depends(require_auth)])
+@app.get("/", dependencies=[])
 def index():
+    """UI shell is public (no secrets in it); all /api/* endpoints stay gated.
+    The page prompts for the control token and stores it in localStorage."""
     html = Path(__file__).parent / "static" / "index.html"
     from fastapi.responses import HTMLResponse
     return HTMLResponse(html.read_text())

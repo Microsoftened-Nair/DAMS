@@ -67,6 +67,13 @@ table{width:100%;border-collapse:collapse;font-size:12.5px}
 td,th{padding:7px 9px;text-align:left;border-bottom:1px solid var(--border)}
 th{color:var(--dim);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:1px}
 .num{font-variant-numeric:tabular-nums;font-weight:700}
+.flow-node rect{fill:rgba(30,41,59,.8);stroke:var(--border);rx:10}
+.flow-node.running rect{stroke:var(--green);filter:drop-shadow(0 0 8px rgba(16,185,129,.5))}
+.flow-node text{fill:var(--text);font-size:12px;font-family:Inter,sans-serif;text-anchor:middle}
+.flow-node .sub{fill:var(--dim);font-size:9.5px}
+.edge{stroke:rgba(100,116,139,.35);stroke-width:1.5;fill:none}
+.edge.hot{stroke:var(--cyan);stroke-width:2;filter:drop-shadow(0 0 4px rgba(6,182,212,.6))}
+.particle{fill:var(--cyan);filter:drop-shadow(0 0 5px rgba(6,182,212,.9))}
 aside{display:flex;flex-direction:column;gap:14px}
 .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0}
 .kv span:first-child{color:var(--dim)}
@@ -107,6 +114,9 @@ aside{display:flex;flex-direction:column;gap:14px}
   <!-- FLEET -->
   <section id="v-fleet">
     <div class="glass" style="margin-bottom:14px"><h2>Pipeline</h2><div id="pipeInfo" class="kv">—</div></div>
+    <div class="glass" style="margin-bottom:14px"><h2>Agent Communication Flow — Live</h2>
+      <svg id="flowSvg" viewBox="0 0 900 380" style="width:100%;height:auto;display:block"></svg>
+    </div>
     <div class="grid6" id="fleet"></div>
   </section>
 
@@ -263,11 +273,111 @@ function renderTree(el, files, prefix){
     : '<div style="color:var(--dim);font-size:12px">(empty)</div>';
 }
 
+// ---- Agent Communication Flow Graph ---------------------------------------
+const NODES = {
+  arch:  {x:450,y:50, label:'Architect', sub:'spec / manifest'},
+  orch:  {x:450,y:170,label:'Orchestrator', sub:'gates / sanitizer'},
+  coder: {x:230,y:290,label:'Coder', sub:'src/*'},
+  tester:{x:670,y:290,label:'Tester', sub:'tests/*'},
+  triage:{x:60, y:80, label:'Triage', sub:'issues'},
+  rev:   {x:840, y:80,label:'Reviewer', sub:'PR diffs'},
+  maint: {x:840, y:200,label:'Maintainer', sub:'merges'},
+  gh:    {x:60,  y:200,label:'GitHub', sub:'issues/PRs'},
+};
+const EDGES = [
+  ['arch','orch'],['orch','coder'],['coder','orch'],['orch','tester'],
+  ['tester','orch'],['orch','arch'],['triage','gh'],['gh','triage'],
+  ['gh','maint'],['rev','maint'],['maint','gh'],['orch','rev'],
+];
+const nodeEls = {}, edgeEls = {};
+function buildFlow(){
+  const svg = document.getElementById('flowSvg');
+  let defs = `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="rgba(100,116,139,.5)"/></marker></defs>`;
+  let edges = EDGES.map(([a,b])=>{
+    const A=NODES[a],B=NODES[b];
+    const mx=(A.x+B.x)/2, my=(A.y+B.y)/2 + (Math.abs(A.x-B.x)<40? -30 : 0);
+    return `<path id="e_${a}_${b}" class="edge" d="M${A.x},${A.y} Q${mx},${my} ${B.x},${B.y}" marker-end="url(#arrow)"/>`;
+  }).join('');
+  let nodes = Object.entries(NODES).map(([id,n])=>`
+    <g id="n_${id}" class="flow-node">
+      <rect x="${n.x-62}" y="${n.y-22}" width="124" height="44" rx="10"/>
+      <text x="${n.x}" y="${n.y-2}">${n.label}</text>
+      <text x="${n.x}" y="${n.y+13}" class="sub">${n.sub}</text>
+    </g>`).join('');
+  svg.innerHTML = defs + edges + nodes;
+  EDGES.forEach(([a,b])=>edgeEls[a+'>'+b]=document.getElementById(`e_${a}_${b}`));
+  Object.keys(NODES).forEach(id=>nodeEls[id]=document.getElementById('n_'+id));
+}
+function flowEvent(e){
+  // map events to edges/nodes
+  const role = e.role || '';
+  const map = {
+    gate_failed:['coder>orch','tester>orch'], failure:['coder>orch','tester>orch'],
+    success:['orch>arch','orch>coder','orch>tester'], arbitration:['orch>arch'],
+    spec_edited:['arch>orch'], phase2_started:['triage>gh'], pipeline_paused:[],
+  };
+  let targets = map[e.event]||[];
+  if(role==='coder') targets=['orch>coder'];
+  if(role==='tester') targets=['orch>tester'];
+  if(role==='reviewer') targets=['rev>maint'];
+  if(role==='maintainer') targets=['maint>gh'];
+  if(role==='architect') targets=['arch>orch'];
+  if(!targets.length) return;
+  targets.forEach(t=>{
+    const el=edgeEls[t]; if(!el) return;
+    el.classList.add('hot'); spawnParticles(el); setTimeout(()=>el.classList.remove('hot'),2500);
+  });
+}
+let particlesOn = {};
+function spawnParticles(pathEl){
+  const id = pathEl.id; if(particlesOn[id]) return; particlesOn[id]=true;
+  const svg=document.getElementById('flowSvg');
+  for(let i=0;i<3;i++){
+    setTimeout(()=>{
+      const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('r',3.2); c.setAttribute('class','particle');
+      svg.appendChild(c);
+      const start=performance.now()+i*350, dur=1100;
+      (function step(now){
+        if(now===undefined) now=performance.now();
+        const t=((now-start)%dur)/dur;
+        if(now>=start && t>=0){
+          const p=pathEl.getPointAtLength(Math.max(0,(t*dur)/pathEl.getTotalLength()*pathEl.getTotalLength()));
+          c.setAttribute('cx',p.x); c.setAttribute('cy',p.y);
+          c.style.opacity = String(1-Math.abs(t-.5)*1.4);
+        }
+        if(now-start < dur*2.4) requestAnimationFrame(step); else c.remove();
+      })();
+    }, i*350);
+  }
+  setTimeout(()=>particlesOn[id]=false, 3000);
+}
+function updateFlowFromFleet(fleet){
+  fleet.forEach(f=>{
+    const key = f.role==='architect'?'arch':f.role==='reviewer'?'rev':
+                f.role==='maintainer'?'maint':f.role;
+    const el=nodeEls[key]; if(!el) return;
+    const running=/RUNNING|WRITING|DESIGN|TEST|ANALYZ/.test(f.status.toUpperCase());
+    el.classList.toggle('running',running);
+  });
+}
+
 async function refresh(){
   try {
     const st = await api('/api/state');
     renderPipeline(st.pipeline); renderFleet(st.fleet);
-    renderEvents(await api('/api/events?limit=200'));
+    updateFlowFromFleet(st.fleet);
+    const evs = await api('/api/events?limit=200');
+    // animate only NEW events since last poll
+    evs.slice(-8).forEach(e=>{
+      const ts = new Date(e.ts).getTime();
+      if(ts > (window._lastEvTs||0)) flowEvent(e);
+    });
+    if(evs.length) window._lastEvTs = Math.max(window._lastEvTs||0,
+      ...evs.map(e=>new Date(e.ts).getTime()));
+    renderEvents(evs);
   } catch(e){ $('#pipelineState').textContent='connection failed'; }
 }
 
@@ -324,7 +434,7 @@ document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{
   (loaders[a.dataset.v]||(()=>{}))();
 });
 
-refresh(); setInterval(refresh, 8000);
+refresh(); buildFlow(); setInterval(refresh, 8000);
 </script>
 </body>
 </html>
