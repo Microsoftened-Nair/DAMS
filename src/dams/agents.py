@@ -43,6 +43,7 @@ def run_agent(role: str, prompt: str, workdir: Path, timeout: int = 900,
         f"or write must be under it, and relative paths in specs/manifests resolve "
         f"from here. Do NOT touch parent directories.\n\n{prompt}"
     )
+    scoped_prompt = apply_ponytail(scoped_prompt, role)
     cmd = ["hermes", "--profile", profile, "chat", "-q", scoped_prompt]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
@@ -77,3 +78,27 @@ def extract_json(text: str) -> Optional[dict]:
                 except json.JSONDecodeError:
                     start = None
     return None
+
+
+# Prompt-layer ruleset injected into coder/reviewer prompts (Ponytail).
+# Source: github.com/DietrichGebert/ponytail (MIT). Kept here so the
+# orchestrator enforces it even if profile SOUL.md files are regenerated.
+PONYTAIL_LADDER = (
+    "PONYTAIL RULES — lazy senior dev mode. Before writing code, stop at the "
+    "first rung that holds: (1) YAGNI — does this need to exist? "
+    "(2) already in this codebase? reuse it. (3) stdlib does it? use it. "
+    "(4) native platform feature? use it. (5) installed dependency solves it? "
+    "use it. (6) can it be one line? make it one. (7) only then: minimum code "
+    "that works. No unrequested abstractions, no new dependencies, no "
+    "boilerplate. Deletion over addition, boring over clever, fewest files. "
+    "Never be lazy about: understanding the problem, input validation at "
+    "trust boundaries, error handling preventing data loss, security, or "
+    "anything the spec explicitly requires."
+)
+
+
+def apply_ponytail(prompt: str, role: str) -> str:
+    """Append the ponytail ruleset for frugal roles (coder, reviewer)."""
+    if role in ("coder", "reviewer"):
+        return prompt + "\n\n" + PONYTAIL_LADDER
+    return prompt
