@@ -52,20 +52,35 @@ class Phase1Orchestrator:
     def run(self, goal: str) -> bool:
         self.log(f"[P1] Goal ingestion: {goal[:100]}...")
 
-        # Step 1: Architecture
-        run_agent("architect",
-                  "Project request:\n" + goal +
-                  "\n\nProduce docs/specs/spec.md with sections '## Unit N: <name>' "
-                  "(ordered atomic implementation specs with explicit I/O JSON schemas), "
-                  "and write agent_manifest.json at the repo root per the schema. "
-                  "Do not write source or test code.",
-                  workdir=self.root, timeout=1800)
+        # Step 1: Architecture (with manifest-validation retry loop)
+        arch_prompt = (
+            "Project request:\n" + goal +
+            "\n\nProduce docs/specs/spec.md with sections '## Unit N: <name>' "
+            "(ordered atomic implementation specs with explicit I/O JSON schemas), "
+            "and write agent_manifest.json at the repo root with EXACTLY these top-level "
+            "keys: manifest_version, project_name, runtime {language, version, "
+            "package_manager, ui_type}, commands {install, build, lint, typecheck?, "
+            "test_unit, dev_server}, contracts {entry_point, specs_dir, source_dir, "
+            "test_dir, port_variable}. Do not write source or test code."
+        )
+        run_agent("architect", arch_prompt, workdir=self.root, timeout=1800)
 
-        try:
-            manifest = load_manifest(self.root)
-        except ManifestError as e:
-            self.log(f"[P1] FATAL: invalid manifest: {e}")
-            return False
+        manifest = None
+        for attempt in range(3):
+            try:
+                manifest = load_manifest(self.root)
+                break
+            except ManifestError as e:
+                self.log(f"[P1] manifest rejected (attempt {attempt + 1}/3): {e}")
+                if attempt == 2:
+                    self.log("[P1] FATAL: Architect failed to produce a valid manifest.")
+                    return False
+                run_agent("architect",
+                          f"Your agent_manifest.json is INVALID and must be rewritten "
+                          f"in place at agent_manifest.json. Validation error: {e}\n"
+                          "Rewrite it now with exactly the required schema shape.",
+                          workdir=self.root, timeout=900)
+
         self.log(f"[P1] Manifest OK: {manifest.project_name} ({manifest.ui_type})")
 
         units = self._spec_units(manifest)
