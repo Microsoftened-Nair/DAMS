@@ -1,0 +1,26 @@
+{
+  "manifest_version": "1.0.0",
+  "project_name": "tiny-calc",
+  "runtime": {
+    "language": "python",
+    "version": "3.10+",
+    "package_manager": "pip",
+    "ui_type": "cli"
+  },
+  "commands": {
+    "install": "python3 -m pip install pytest",
+    "build": "python3 -m compileall src",
+    "lint": "python3 -m py_compile src/calc.py",
+    "typecheck": "python3 -m py_compile src/calc.py",
+    "test_unit": "python3 -m pytest tests -q",
+    "test_integration": "python3 -m pytest tests/integration -q",
+    "dev_server": "python3 -c \"import sys; sys.path.insert(0,'src'); import calc; print(calc.add(1,2))\""
+  },
+  "contracts": {
+    "entry_point": "src/calc.py",
+    "specs_dir": "docs/specs",
+    "source_dir": "src",
+    "test_dir": "tests",
+    "port_variable": ""
+  }
+}

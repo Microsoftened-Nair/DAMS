@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentManifest",
+  "type": "object",
+  "required": ["manifest_version", "project_name", "runtime", "commands", "contracts"],
+  "properties": {
+    "manifest_version": { "type": "string" },
+    "project_name": { "type": "string" },
+    "runtime": {
+      "type": "object",
+      "required": ["language", "version", "package_manager", "ui_type"],
+      "properties": {
+        "language": { "type": "string" },
+        "version": { "type": "string" },
+        "package_manager": { "type": "string" },
+        "ui_type": { "type": "string", "enum": ["cli", "web", "desktop", "library", "service"] }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "required": ["install", "build", "lint", "test_unit", "dev_server"],
+      "properties": {
+        "install": { "type": "string" },
+        "build": { "type": "string" },
+        "lint": { "type": "string" },
+        "typecheck": { "type": "string" },
+        "test_unit": { "type": "string" },
+        "test_integration": { "type": "string" },
+        "dev_server": { "type": "string" }
+      }
+    },
+    "contracts": {
+      "type": "object",
+      "required": ["entry_point", "specs_dir", "source_dir", "test_dir", "port_variable"],
+      "properties": {
+        "entry_point": { "type": "string" },
+        "specs_dir": { "type": "string" },
+        "source_dir": { "type": "string" },
+        "test_dir": { "type": "string" },
+        "port_variable": { "type": "string" }
+      }
+    }
+  }
+}
