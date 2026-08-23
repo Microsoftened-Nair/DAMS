@@ -12,9 +12,11 @@ Loop per spec:
 from __future__ import annotations
 
 import json
+import os
 import random
 import re
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -36,8 +38,20 @@ class Phase1Orchestrator:
         cmd = manifest.cmd(name)
         if not cmd:
             return True, "", ""
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True,
-                           cwd=str(self.root), timeout=600)
+        # Normalize environment: strip PYENV_VERSION pinning and other env
+        # prefixes the Architect may embed in commands. The orchestrator's
+        # shell may resolve pyenv differently from agent shells, which made
+        # gates fail even when the code was fine. We rewrite
+        # "VAR=x python ..." to use the current default interpreter.
+        import re as _re
+        cmd = _re.sub(r'^(?:\w+=\S+\s+)*python(?:\d+(?:\.\d+)*)?\b',
+                      sys.executable, cmd)
+        env = {k: v for k, v in os.environ.items() if k != "PYENV_VERSION"}
+        try:
+            r = subprocess.run(cmd, shell=True, capture_output=True, text=True,
+                               cwd=str(self.root), timeout=600, env=env)
+        except subprocess.TimeoutExpired:
+            return False, "", f"[gate '{name}' timed out after 600s]"
         return r.returncode == 0, r.stdout, r.stderr
 
     def _spec_units(self, manifest: Manifest) -> list:
@@ -91,6 +105,13 @@ class Phase1Orchestrator:
 
         all_pass = True
         for unit_no, unit_title in units:
+            # Resume support: skip a unit if its tests already pass — the
+            # orchestrator can be stopped/restarted without redoing work.
+            ok, out, err = self._run_manifest_cmd(manifest, "test_unit")
+            if ok:
+                self.log(f"[P1/U{unit_no}] tests already green — skipping "
+                         f"(resume mode)")
+                continue
             ok = self._build_unit(manifest, int(unit_no), unit_title)
             all_pass = all_pass and ok
 
