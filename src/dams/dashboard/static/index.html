@@ -74,6 +74,36 @@ th{color:var(--dim);font-weight:500;font-size:11px;text-transform:uppercase;lett
 .edge{stroke:rgba(100,116,139,.35);stroke-width:1.5;fill:none}
 .edge.hot{stroke:var(--cyan);stroke-width:2;filter:drop-shadow(0 0 4px rgba(6,182,212,.6))}
 .particle{fill:var(--cyan);filter:drop-shadow(0 0 5px rgba(6,182,212,.9))}
+
+/* ---- Fleet card upgrades: hexagon avatar, ring gauge, scanlines, tilt ---- */
+.agent-card{position:relative;overflow:hidden;transition:transform .25s,border-color .3s,box-shadow .3s}
+.agent-card::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent 0 3px,rgba(255,255,255,.012) 3px 4px)}
+.agent-card.running{border-color:rgba(16,185,129,.45);
+  box-shadow:0 0 22px rgba(16,185,129,.18), inset 0 0 30px rgba(16,185,129,.05)}
+.agent-card.error{border-color:rgba(239,68,68,.5);box-shadow:0 0 20px rgba(239,68,68,.15)}
+.agent-card.idle{opacity:.72}
+.agent-card:hover{transform:translateY(-3px) scale(1.02)}
+.ac-head{display:flex;align-items:center;gap:12px}
+.hexa{width:52px;height:52px;flex:none}
+.hexa polygon{fill:rgba(15,23,42,.85);stroke-width:2}
+.hexa text{font-size:17px;font-weight:700;text-anchor:middle;dominant-baseline:central;
+  font-family:'JetBrains Mono',monospace}
+.ring{transform:rotate(-90deg)}
+.ring .bgc{stroke:rgba(100,116,139,.18);fill:none;stroke-width:3}
+.ring .fgc{fill:none;stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset .8s ease}
+.ac-name{font-size:14px;font-weight:600;letter-spacing:.3px}
+.ac-sub{font-size:10.5px;color:var(--dim);margin-top:2px}
+.ac-stats{display:flex;gap:14px;margin-top:11px;padding-top:9px;border-top:1px solid var(--border)}
+.ac-stat{text-align:center;flex:1}
+.ac-stat b{display:block;font-size:15px;font-variant-numeric:tabular-nums;font-weight:700}
+.ac-stat span{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
+.ac-bar{height:4px;border-radius:99px;background:rgba(100,116,139,.18);margin-top:10px;overflow:hidden}
+.ac-bar i{display:block;height:100%;border-radius:99px;width:0%;transition:width .7s ease}
+@keyframes sweep{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+.agent-card.running .ac-bar i::after{content:'';position:absolute;inset:0;width:40%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);animation:sweep 1.6s infinite}
+.ac-bar{position:relative}
 aside{display:flex;flex-direction:column;gap:14px}
 .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0}
 .kv span:first-child{color:var(--dim)}
@@ -233,17 +263,55 @@ function badge(st){
   return '<span class="badge b-cyan">'+st+'</span>';
 }
 
+const ROLE_META = {
+  architect:{icon:'◈', color:'#8B5CF6', hex:'ARCH'},
+  coder:    {icon:'⌘', color:'#10B981', hex:'CODE'},
+  tester:   {icon:'✓', color:'#06B6D4', hex:'TEST'},
+  triage:   {icon:'⚑', color:'#F59E0B', hex:'TRIA'},
+  reviewer: {icon:'👁', color:'#F472B6', hex:'REVW'},
+  maintainer:{icon:'⚓', color:'#60A5FA', hex:'MNTN'},
+};
 function renderFleet(fleet){
-  $('#fleet').innerHTML = fleet.map(a=>`
-    <div class="glass agent-card ${a.status==='RUNNING'?'glow-g':''}">
-      <h3>${a.role}</h3>
-      <div class="st">${badge(a.status)}</div>
-      <div class="meta">
-        ${a.model}<br>${a.provider}<br>
-        <span style="color:#67E8F9">${a.domain}</span>
-        ${a.last_event?`<br><span class="mono" style="font-size:10px">${new Date(a.last_event.ts).toLocaleTimeString()} ${a.last_event.event}</span>`:''}
+  $('#fleet').innerHTML = fleet.map((a,idx)=>{
+    const m = ROLE_META[a.role]||{icon:'●',color:'#94A3B8',hex:a.role.slice(0,4).toUpperCase()};
+    const running=/RUNNING|WRITING|DESIGN|TEST|ANALYZ/.test(a.status.toUpperCase());
+    const failed=/FAIL|ERROR/.test(a.status.toUpperCase());
+    const cls = running?'running':failed?'error':'idle';
+    // activity ring: derive a pseudo-activity from recent event recency
+    const lastTs = a.last_event? new Date(a.last_event.ts).getTime():0;
+    const age = lastTs? (Date.now()-lastTs)/1000 : 9999;
+    const act = Math.max(0, Math.min(1, 1 - age/300)); // decays over 5 min
+    const circ = 2*Math.PI*23;
+    // deterministic pseudo session count from event volume
+    const evCount = a.last_event? 1:0;
+    return `
+    <div class="glass agent-card ${cls}" style="animation-delay:${idx*60}ms">
+      <div class="ac-head">
+        <svg class="hexa" viewBox="0 0 52 52">
+          <polygon points="26,2 48,14 48,38 26,50 4,38 4,14"
+            stroke="${m.color}" style="filter:drop-shadow(0 0 ${running?7:3}px ${m.color})"/>
+          <text x="26" y="27" fill="${m.color}">${m.hex}</text>
+        </svg>
+        <div style="flex:1">
+          <div class="ac-name">${a.role.charAt(0).toUpperCase()+a.role.slice(1)}</div>
+          <div class="ac-sub">${a.model} · ${a.provider}</div>
+        </div>
+        <svg class="ring" width="52" height="52">
+          <circle class="bgc" cx="26" cy="26" r="23"/>
+          <circle class="fgc" cx="26" cy="26" r="23"
+            stroke="${running?'#10B981':failed?'#EF4444':'#334155'}"
+            stroke-dasharray="${circ}" stroke-dashoffset="${circ*(1-act)}"/>
+        </svg>
       </div>
-    </div>`).join('');
+      <div style="margin-top:9px">${badge(a.status)}</div>
+      <div class="ac-bar"><i style="width:${act*100}%;background:${running?'#10B981':failed?'#EF4444':'#334155'}"></i></div>
+      <div class="ac-stats">
+        <div class="ac-stat"><b>${a.pids.length}</b><span>procs</span></div>
+        <div class="ac-stat"><b style="font-size:11px;line-height:15px;display:block;margin-top:0;color:#67E8F9">${(a.domain||'').split(',')[0]}</b><span>domain</span></div>
+        <div class="ac-stat"><b>${a.last_event?new Date(a.last_event.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'—'}</b><span>last</span></div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function renderEvents(evs){
