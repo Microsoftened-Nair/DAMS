@@ -89,6 +89,12 @@ class Phase2Pipeline:
 
     # -- stage 1: synthetic user files an issue ---------------------------------
     def explore_and_file_issue(self) -> Optional[int]:
+        # stop_after_issues: for bounded test runs — pipeline ends cleanly once
+        # this many issues have been through the full lifecycle.
+        stop = getattr(self, "stop_after_issues", None)
+        if stop is not None and getattr(self, "_issues_completed", 0) >= stop:
+            self.log(f"[P2] stop_after_issues={stop} reached — halting pipeline.")
+            return -1
         res = run_agent(
             "triage",  # synthetic user runs under triage tooling in dry-run mode
             "SYNTHETIC USER: Explore this project's public interfaces (run its entry "
@@ -205,4 +211,18 @@ class Phase2Pipeline:
         if not approved:
             return MaintenanceResult(issue, None, False, "reviewer rejected")
         merged = self.merge(branch)
+        if hasattr(self, "_issues_completed"):
+            self._issues_completed += 1
         return MaintenanceResult(issue, None, merged, "done")
+
+    def run_until(self, max_issues: int):
+        """Bounded run: process issues until max_issues full lifecycles complete."""
+        self._issues_completed = 0
+        results = []
+        while self._issues_completed < max_issues:
+            self.log(f"[P2] cycle {self._issues_completed + 1}/{max_issues}")
+            res = self.run_once()
+            results.append(res)
+            if res.issue is None:
+                break  # nothing found / halted — don't spin
+        return results

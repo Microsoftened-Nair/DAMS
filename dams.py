@@ -18,10 +18,12 @@ def main():
     p1.add_argument("--root", default=".")
     p1.add_argument("goal")
 
-    p2 = sub.add_parser("phase2", help="Maintenance pipeline (one cycle)")
+    p2 = sub.add_parser("phase2", help="Maintenance pipeline")
     p2.add_argument("--root", default=".")
     p2.add_argument("--dry-run", action="store_true")
     p2.add_argument("--cycles", type=int, default=1)
+    p2.add_argument("--issues", type=int, default=None,
+                    help="bounded run: stop after N full issue lifecycles")
 
     sub.add_parser("smoke", help="Run framework self-test (no LLM calls)")
 
@@ -33,10 +35,14 @@ def main():
         sys.exit(0 if ok else 1)
     elif args.cmd == "phase2":
         pipe = Phase2Pipeline(root, dry_run=args.dry_run)
-        for i in range(args.cycles):
-            print(f"=== Phase 2 cycle {i+1}/{args.cycles} ===")
-            res = pipe.run_once()
-            print(res)
+        if args.issues:
+            for i, res in enumerate(pipe.run_until(args.issues), 1):
+                print(f"issue {i}: {res}")
+        else:
+            for i in range(args.cycles):
+                print(f"=== Phase 2 cycle {i+1}/{args.cycles} ===")
+                res = pipe.run_once()
+                print(res)
     else:
         from dams.smoke_test import run as smoke
         smoke(root)
