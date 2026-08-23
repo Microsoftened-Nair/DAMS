@@ -20,7 +20,8 @@ import sys
 import time
 from pathlib import Path
 
-from .agents import extract_json, run_agent
+from .agents import extract_json, run_agent  # noqa: F401  (re-exported)
+from .events import EventBusLog
 from .guardrails import CircuitBreaker
 from .manifest import Manifest, ManifestError, load as load_manifest
 from .sanitizer import sanitize
@@ -29,9 +30,10 @@ UNIT_TIMEOUTS = {"coder": 1200, "tester": 1200}
 
 
 class Phase1Orchestrator:
-    def __init__(self, root: Path, log=print):
+    def __init__(self, root: Path, log=None):
         self.root = Path(root).resolve()
-        self.log = log
+        # Default logger mirrors every line into the dashboard event bus
+        self.log = log or EventBusLog(self.root)
 
     # -- helpers ---------------------------------------------------------------
     def _run_manifest_cmd(self, manifest: Manifest, name: str) -> tuple:
@@ -133,7 +135,20 @@ class Phase1Orchestrator:
         return all_pass
 
     # -- per-unit loop -----------------------------------------------------------
+    def _wait_if_paused(self) -> None:
+        """Block between agent rounds while .dams/pause exists."""
+        flag = self.root / ".dams" / "pause"
+        while flag.exists():
+            if not getattr(self, "_pause_logged", False):
+                self.log("[P1] PAUSED via dashboard — waiting...")
+                self._pause_logged = True
+            time.sleep(3)
+        if getattr(self, "_pause_logged", False):
+            self.log("[P1] resumed")
+            self._pause_logged = False
+
     def _build_unit(self, manifest: Manifest, unit_no: int, title: str) -> bool:
+        self._wait_if_paused()
         breaker = CircuitBreaker()
         contract = (
             f"Implement specification Unit {unit_no}: {title}\n"

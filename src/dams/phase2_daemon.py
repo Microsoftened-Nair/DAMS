@@ -40,7 +40,11 @@ class StoppablePipeline(Phase2Pipeline):
     def run_until(self, max_issues):
         self._issues_completed = 0
         results = []
+        pause_flag = self.root / ".dams" / "pause"
         while self._issues_completed < max_issues:
+            while pause_flag.exists():
+                self.log("[P2] PAUSED via dashboard — waiting...")
+                time.sleep(3)
             if self._should_stop():
                 self.log(f"[P2] stopped cleanly at {self._issues_completed}/{max_issues} issues.")
                 break

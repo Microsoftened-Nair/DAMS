@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>DAMS Command Center</title>
+<style>
+:root{
+  --bg:#090D16; --bg2:#0F172A; --glass:rgba(30,41,59,0.7); --border:rgba(255,255,255,0.08);
+  --green:#10B981; --violet:#8B5CF6; --amber:#F59E0B; --crimson:#EF4444; --cyan:#06B6D4;
+  --text:#E2E8F0; --dim:#64748B;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:radial-gradient(1200px 800px at 20% 10%,#101828 0%,var(--bg) 55%);color:var(--text);
+  font-family:Inter,'SF Pro Display',system-ui,sans-serif;min-height:100vh;font-size:14px}
+code,pre,.mono{font-family:'JetBrains Mono','Fira Code',monospace}
+.glass{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:1px solid var(--border);border-radius:14px;padding:16px}
+header{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:14px;
+  padding:12px 20px;background:rgba(9,13,22,0.85);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--border)}
+header h1{font-size:15px;font-weight:600;letter-spacing:.5px}
+header .dot{width:9px;height:9px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 12px rgba(16,185,129,.5);animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.5}}
+#pipelineState{font-size:11px;color:var(--dim);letter-spacing:1px;text-transform:uppercase}
+.spacer{flex:1}
+button{cursor:pointer;border:1px solid var(--border);background:rgba(30,41,59,.5);color:var(--text);
+  padding:7px 14px;border-radius:8px;font-size:12.5px;font-family:inherit;transition:.15s}
+button:hover{transform:scale(1.02);border-color:rgba(255,255,255,.25)}
+button.danger{border-color:rgba(239,68,68,.4);color:#FCA5A5}
+button.go{border-color:rgba(16,185,129,.4);color:#6EE7B7}
+button.violet{border-color:rgba(139,92,246,.45);color:#C4B5FD}
+input,select,textarea{background:rgba(15,23,42,.7);border:1px solid var(--border);color:var(--text);
+  border-radius:8px;padding:7px 10px;font-size:13px;font-family:inherit}
+textarea{font-family:'JetBrains Mono',monospace;width:100%}
+.layout{display:grid;grid-template-columns:200px 1fr 320px;gap:14px;padding:14px 20px;max-width:1800px;margin:0 auto}
+nav{display:flex;flex-direction:column;gap:6px}
+nav a{padding:9px 12px;border-radius:9px;color:var(--dim);text-decoration:none;font-size:13px;transition:.15s;cursor:pointer;border:1px solid transparent}
+nav a:hover{color:var(--text);background:rgba(30,41,59,.5)}
+nav a.active{color:var(--text);background:rgba(139,92,246,.12);border-color:rgba(139,92,246,.3)}
+main{display:flex;flex-direction:column;gap:14px;min-width:0}
+.grid6{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.agent-card h3{font-size:13.5px;display:flex;align-items:center;gap:8px}
+.agent-card .st{font-size:11px;letter-spacing:1px;text-transform:uppercase;margin:8px 0 4px}
+.agent-card .meta{font-size:11px;color:var(--dim);line-height:1.6}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10.5px;letter-spacing:.5px}
+.b-green{background:rgba(16,185,129,.15);color:#6EE7B7;border:1px solid rgba(16,185,129,.35)}
+.b-violet{background:rgba(139,92,246,.15);color:#C4B5FD;border:1px solid rgba(139,92,246,.35)}
+.b-red{background:rgba(239,68,68,.15);color:#FCA5A5;border:1px solid rgba(239,68,68,.35)}
+.b-gray{background:rgba(100,116,139,.15);color:#94A3B8;border:1px solid rgba(100,116,139,.35)}
+.b-cyan{background:rgba(6,182,212,.13);color:#67E8F9;border:1px solid rgba(6,182,212,.35)}
+.glow-g{box-shadow:0 0 14px rgba(16,185,129,.25);animation:pulse 2.4s infinite}
+h2{font-size:13px;letter-spacing:1.2px;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+pre.term{background:#070A10;border:1px solid var(--border);border-radius:10px;padding:12px;
+  font-size:11.5px;line-height:1.65;max-height:420px;overflow:auto;white-space:pre-wrap}
+.ev{padding:7px 9px;border-left:2px solid var(--violet);margin-bottom:6px;background:rgba(15,23,42,.5);
+  border-radius:0 8px 8px 0;font-size:12px;line-height:1.5}
+.ev.error{border-color:var(--crimson)} .ev.success{border-color:var(--green)} .ev.warn{border-color:var(--amber)}
+.ev .t{color:var(--dim);font-size:10.5px;margin-right:6px}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.blind{position:relative}
+.blind::after{content:'BLIND DOMAIN';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  color:rgba(239,68,68,.75);letter-spacing:3px;font-size:11px;pointer-events:none;
+  background:repeating-linear-gradient(-45deg,rgba(239,68,68,.05) 0 8px,transparent 8px 16px)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+td,th{padding:7px 9px;text-align:left;border-bottom:1px solid var(--border)}
+th{color:var(--dim);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:1px}
+.num{font-variant-numeric:tabular-nums;font-weight:700}
+aside{display:flex;flex-direction:column;gap:14px}
+.kv{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0}
+.kv span:first-child{color:var(--dim)}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:100;
+  display:none;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{width:min(480px,92vw)}
+.check{display:flex;align-items:center;gap:9px;padding:6px 0;font-size:13px}
+.check .ok{color:var(--green)} .check .no{color:var(--dim)}
+.fab{position:fixed;bottom:22px;right:22px;display:flex;flex-direction:column;gap:10px;z-index:60}
+.hidden{display:none!important}
+@media(max-width:1200px){.layout{grid-template-columns:1fr}nav{flex-direction:row;flex-wrap:wrap}aside{order:-1}}
+@media(max-width:700px){.split{grid-template-columns:1fr}.grid6{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="dot"></div>
+  <h1>DAMS COMMAND CENTER</h1>
+  <span id="pipelineState">connecting…</span>
+  <div class="spacer"></div>
+  <button class="danger" onclick="ctl('pause')">⏸ Pause</button>
+  <button class="go" onclick="ctl('resume')">▶ Resume</button>
+</header>
+
+<div class="layout">
+<nav id="nav">
+  <a data-v="fleet" class="active">Fleet Status</a>
+  <a data-v="cleanroom">Cleanroom</a>
+  <a data-v="sanitizer">Sanitizer Audit</a>
+  <a data-v="spec">Spec Center</a>
+  <a data-v="manifest">Manifest</a>
+  <a data-v="costs">Cost &amp; Audit</a>
+  <a data-v="controls">Emergency</a>
+</nav>
+
+<main>
+  <!-- FLEET -->
+  <section id="v-fleet">
+    <div class="glass" style="margin-bottom:14px"><h2>Pipeline</h2><div id="pipeInfo" class="kv">—</div></div>
+    <div class="grid6" id="fleet"></div>
+  </section>
+
+  <!-- CLEANROOM -->
+  <section id="v-cleanroom" class="hidden">
+    <div class="glass"><h2>Double-Blind Isolation</h2>
+      <div class="split">
+        <div><strong style="font-size:12px;color:#6EE7B7">CODER VIEW — src/*</strong>
+          <div id="srcTree" style="margin-top:8px"></div></div>
+        <div class="blind" style="border-radius:10px;padding:12px">
+          <strong style="font-size:12px;color:#FCA5A5">TESTER VIEW — tests/*</strong>
+          <div id="testTree" style="margin-top:8px;filter:blur(1.5px)"></div>
+        </div>
+      </div>
+    </div>
+    <div class="glass" style="margin-top:14px"><h2>File Viewer</h2>
+      <input id="fileQ" placeholder="path e.g. src/calc.py" style="width:60%;margin-right:8px"/>
+      <button onclick="loadFile()">Open</button>
+      <pre class="term mono" id="fileView" style="margin-top:10px">// select a file</pre>
+    </div>
+  </section>
+
+  <!-- SANITIZER -->
+  <section id="v-sanitizer" class="hidden">
+    <div class="glass"><h2>AST Sanitizer Gate Inspector</h2>
+      <p style="font-size:12.5px;color:var(--dim);line-height:1.7;margin-bottom:10px">
+        Events marked SANITIZED show diagnostics where test paths, line numbers and
+        assertion sources were stripped before reaching the Coder.</p>
+      <pre class="term" id="sanEvents"></pre>
+    </div>
+  </section>
+
+  <!-- SPEC -->
+  <section id="v-spec" class="hidden">
+    <div class="glass"><h2>docs/specs/spec.md</h2>
+      <textarea id="specBox" rows="18" spellcheck="false"></textarea>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+        <button class="violet" onclick="saveSpec()">Save Spec</button>
+        <span id="specMsg" style="font-size:12px;color:var(--dim)"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- MANIFEST -->
+  <section id="v-manifest" class="hidden">
+    <div class="glass"><h2>agent_manifest.json
+      <span id="manBadge" class="badge b-gray">…</span></h2>
+      <pre class="term" id="manView"></pre>
+    </div>
+  </section>
+
+  <!-- COSTS -->
+  <section id="v-costs" class="hidden">
+    <div class="glass"><h2>Token / Session Usage by Role</h2>
+      <table><thead><tr><th>Role</th><th>Sessions</th><th>Input Tok</th><th>Output Tok</th><th>Cost</th></tr></thead>
+      <tbody id="costRows"></tbody></table>
+    </div>
+  </section>
+
+  <!-- CONTROLS -->
+  <section id="v-controls" class="hidden">
+    <div class="glass"><h2>Emergency Command Center</h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <button class="danger" onclick="ctl('stop')">■ Stop Pipeline</button>
+        <button class="violet" onclick="ctl('force_arbitration')">⚖ Force Arbitration</button>
+        <button onclick="ctl('reset_breaker')">↺ Reset Circuit Breaker</button>
+      </div>
+      <h2>Manual Merge Override (bypasses guardrails)</h2>
+      <div style="display:flex;gap:8px">
+        <input id="opSig" placeholder="operator signature (min 4 chars)" style="flex:1"/>
+        <button class="danger" onclick="overrideMerge()">Override</button>
+      </div>
+      <p style="font-size:11.5px;color:var(--dim);margin-top:8px">All overrides are written to the immutable audit log with your signature.</p>
+    </div>
+    <div class="glass" style="margin-top:14px"><h2>Phase 2 Service</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="issueN" type="number" value="3" min="1" style="width:80px"/>
+        <button class="go" onclick="startPhase2()">Start Phase 2 (bounded)</button>
+        <span id="p2msg" style="font-size:12px;color:var(--dim)"></span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<aside>
+  <div class="glass"><h2>Live Event Stream</h2><div id="events" style="max-height:520px;overflow:auto"></div></div>
+</aside>
+</div>
+
+<div class="fab">
+  <button class="danger" onclick="ctl('pause')" title="Emergency Pause">⏸</button>
+  <button class="violet" onclick="ctl('force_arbitration')" title="Force Arbitration">⚖</button>
+</div>
+
+<script>
+let TOKEN = localStorage.getItem('dams_token') || '';
+if (!TOKEN) { TOKEN = prompt('DAMS control token:'); if (TOKEN) localStorage.setItem('dams_token', TOKEN); }
+const H = {'Authorization': 'Bearer ' + TOKEN};
+const $ = s => document.querySelector(s);
+
+async function api(path, opts={}) {
+  const r = await fetch(path, {...opts, headers:{'Content-Type':'application/json', ...H, ...(opts.headers||{})}});
+  if (r.status === 401) { localStorage.removeItem('dams_token'); location.reload(); }
+  return r.json();
+}
+async function ctl(a, body={}) { await api('/api/control/'+a, {method:'POST', body:JSON.stringify(body)}); refresh(); }
+
+function badge(st){
+  const u=st.toUpperCase();
+  if(/RUNNING|WRITING|DESIGN|TEST|ANALYZ/.test(u)) return '<span class="badge b-green">'+st+'</span>';
+  if(/FAIL|ERROR|STOP/.test(u)) return '<span class="badge b-red">'+st+'</span>';
+  if(/ARBITR|WARN/.test(u)) return '<span class="badge b-violet">'+st+'</span>';
+  if(u==='IDLE') return '<span class="badge b-gray">IDLE</span>';
+  return '<span class="badge b-cyan">'+st+'</span>';
+}
+
+function renderFleet(fleet){
+  $('#fleet').innerHTML = fleet.map(a=>`
+    <div class="glass agent-card ${a.status==='RUNNING'?'glow-g':''}">
+      <h3>${a.role}</h3>
+      <div class="st">${badge(a.status)}</div>
+      <div class="meta">
+        ${a.model}<br>${a.provider}<br>
+        <span style="color:#67E8F9">${a.domain}</span>
+        ${a.last_event?`<br><span class="mono" style="font-size:10px">${new Date(a.last_event.ts).toLocaleTimeString()} ${a.last_event.event}</span>`:''}
+      </div>
+    </div>`).join('');
+}
+
+function renderEvents(evs){
+  $('#events').innerHTML = evs.slice().reverse().map(e=>`
+    <div class="ev ${e.severity}"><span class="t mono">${new Date(e.ts).toLocaleTimeString()}</span>
+    <b>${e.source}${e.role?'/'+e.role:''}</b> · ${e.event}
+    ${e.data&&e.data.message?`<br><span style="color:var(--dim)">${e.data.message.slice(0,160)}</span>`:''}</div>`).join('')
+    || '<div style="color:var(--dim);font-size:12px">no events yet</div>';
+  $('#sanEvents').textContent = evs.filter(e=>e.severity!=='info')
+    .map(e=>`[${new Date(e.ts).toLocaleTimeString()}] (${e.severity}) ${e.source}/${e.role||'-'} ${e.event} ${e.data?.message||''}`).join('\n')
+    || '(no sanitized/warn/error events)';
+}
+
+function renderPipeline(p){
+  $('#pipelineState').textContent = p.paused ? '⏸ PAUSED' : (p.running ? '● RUNNING pid '+p.pid : '○ IDLE');
+  $('#pipeInfo').innerHTML =
+    `<span>Project</span><span class="mono">${p.project}</span>
+     <span>Daemon PID</span><span class="num">${p.pid||'—'}</span>
+     <span>Paused</span><span>${p.paused?'YES':'no'}</span>
+     <span>Stop requested</span><span>${p.stop_requested?'YES':'no'}</span>`;
+}
+
+function renderTree(el, files, prefix){
+  el.innerHTML = files.length
+    ? files.map(f=>`<div class="mono" style="font-size:11.5px;padding:2px 0;cursor:pointer"
+        onclick="openPath('${f}')">${f.replace(prefix,'')}</div>`).join('')
+    : '<div style="color:var(--dim);font-size:12px">(empty)</div>';
+}
+
+async function refresh(){
+  try {
+    const st = await api('/api/state');
+    renderPipeline(st.pipeline); renderFleet(st.fleet);
+    renderEvents(await api('/api/events?limit=200'));
+  } catch(e){ $('#pipelineState').textContent='connection failed'; }
+}
+
+async function loadCleanroom(){
+  const d = await api('/api/cleanroom');
+  renderTree($('#srcTree'), d.src_files, ''); 
+  renderTree($('#testTree'), d.test_files, '');
+}
+window.openPath = async p => { $('#fileQ').value=p; loadFile(); };
+async function loadFile(){
+  const p = $('#fileQ').value.trim(); if(!p) return;
+  const d = await api('/api/file?path='+encodeURIComponent(p));
+  $('#fileView').textContent = d.content ?? ('error: '+d.detail);
+}
+async function saveSpec(){
+  const r = await api('/api/spec',{method:'POST',body:JSON.stringify({content:$('#specBox').value})});
+  $('#specMsg').textContent = `saved ${r.chars} chars at ${new Date().toLocaleTimeString()}`;
+}
+async function overrideMerge(){
+  const sig = $('#opSig').value.trim();
+  if(sig.length<4){alert('signature required (min 4 chars)');return;}
+  await ctl('override_merge',{signature:sig}); $('#opSig').value='';
+  alert('Override recorded in audit log.');
+}
+async function startPhase2(){
+  const n = parseInt($('#issueN').value||'3');
+  const r = await api('/api/control/start_phase2',{method:'POST',body:JSON.stringify({issues:n})});
+  $('#p2msg').textContent = r.ok ? `started (bounded to ${n} issues)` : 'failed — check daemon';
+}
+async function loadCosts(){
+  const d = await api('/api/costs');
+  $('#costRows').innerHTML = d.roles.map(r=>{
+    const u = r.usage||{}; const keys = Object.keys(u);
+    return `<tr><td>${r.role}</td><td class="num">${u.sessions??u.calls??keys.length?'—':'—'}</td>
+      <td class="num">${u.input_tokens??u.prompt_tokens??u.total_input_tokens??'—'}</td>
+      <td class="num">${u.output_tokens??u.completion_tokens??u.total_output_tokens??'—'}</td>
+      <td class="num">${u.cost??u.total_cost??'—'}</td></tr>`;
+  }).join('');
+}
+async function loadManifest(){
+  const d = await api('/api/manifest');
+  $('#manBadge').className = 'badge '+(d.valid?'b-green':'b-red');
+  $('#manBadge').textContent = d.valid ? 'SCHEMA VALID' : 'INVALID';
+  $('#manView').textContent = JSON.stringify(d.valid?d.manifest:d, null, 2);
+}
+async function loadSpec(){ const d = await api('/api/spec'); $('#specBox').value = d.content||''; }
+
+// nav
+const loaders = {cleanroom:loadCleanroom, manifest:loadManifest, costs:loadCosts, spec:loadSpec};
+document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{
+  document.querySelectorAll('#nav a').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('main section').forEach(s=>s.classList.add('hidden'));
+  a.classList.add('active'); $('#v-'+a.dataset.v).classList.remove('hidden');
+  (loaders[a.dataset.v]||(()=>{}))();
+});
+
+refresh(); setInterval(refresh, 8000);
+</script>
+</body>
+</html>

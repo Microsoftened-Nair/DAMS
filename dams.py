@@ -28,6 +28,9 @@ def main():
 
     sub.add_parser("smoke", help="Run framework self-test (no LLM calls)")
 
+    ui = sub.add_parser("serve-ui", help="Launch the dashboard web UI")
+    ui.add_argument("--port", type=int, default=8420)
+
     sv = sub.add_parser("serve", help="Phase 2 service: start/stop/status")
     sv.add_argument("--root", default=None)
     sv.add_argument("action", choices=["start", "stop", "status"])
@@ -68,6 +71,9 @@ def main():
             if st["recent_log"]:
                 print("--- recent ---")
                 print(st["recent_log"])
+    elif args.cmd == "serve-ui":
+        from dams.dashboard.server import run_server
+        run_server(root, port=args.port)
     elif args.cmd == "smoke":
         from dams.smoke_test import run as smoke
         smoke(root)
