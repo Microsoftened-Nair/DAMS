@@ -27,14 +27,26 @@ class AgentResult:
 
 def run_agent(role: str, prompt: str, workdir: Path, timeout: int = 900,
               extra_env_isolation: bool = True) -> AgentResult:
-    """Run `hermes chat -q` under the given profile, in the given workdir."""
+    """Run `hermes chat -q` under the given profile, in the given workdir.
+
+    Root discipline: the absolute project workdir is prepended to every prompt
+    and agents are instructed to operate ONLY inside it, so they never resolve
+    paths to some parent repo root.
+    """
     profile = PROFILE_MAP.get(role)
     if profile is None:
         raise ValueError(f"unknown agent role: {role}")
-    cmd = ["hermes", "--profile", profile, "chat", "-q", prompt]
+    root = Path(workdir).resolve()
+    scoped_prompt = (
+        f"PROJECT ROOT: {root}\n"
+        f"You MUST operate exclusively inside this directory — every file you read "
+        f"or write must be under it, and relative paths in specs/manifests resolve "
+        f"from here. Do NOT touch parent directories.\n\n{prompt}"
+    )
+    cmd = ["hermes", "--profile", profile, "chat", "-q", scoped_prompt]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
-                           cwd=str(workdir))
+                           cwd=str(root))
     except subprocess.TimeoutExpired:
         return AgentResult(role=role, ok=False, output="[TIMEOUT after %ds]" % timeout)
     combined = (r.stdout or "") + (r.stderr or "")

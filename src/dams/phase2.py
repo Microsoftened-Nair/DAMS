@@ -32,14 +32,60 @@ class MaintenanceResult:
 
 
 class Phase2Pipeline:
-    def __init__(self, root: Path, dry_run: bool = False, log=print):
+    def __init__(self, root: Path, dry_run: bool = False, auto_create_repo: bool = True,
+                 log=print):
         self.root = Path(root).resolve()
         self.dry_run = dry_run
+        self.auto_create_repo = auto_create_repo
         self.log = log
 
     def has_gh(self) -> bool:
         ok, _, _ = sh("gh auth status", self.root)
         return ok
+
+    def has_remote(self) -> bool:
+        ok, out, _ = sh("git remote get-url origin", self.root)
+        return ok and bool(out.strip())
+
+    def ensure_remote(self) -> bool:
+        """Guarantee the project has a GitHub origin remote.
+
+        If the repo has no remote and auto_create_repo is set, create a private
+        GitHub repo named after the directory (or agent_manifest project_name),
+        push everything including tags, and wire it as origin.
+        """
+        if self.has_remote():
+            return True
+        if not self.has_gh():
+            self.log("[P2] no gh auth and no remote -> local-only mode")
+            return False
+        if not self.auto_create_repo:
+            self.log("[P2] no remote configured and auto-create disabled")
+            return False
+        name = self.root.name
+        manifest_path = self.root / "agent_manifest.json"
+        if manifest_path.exists():
+            try:
+                name = json.loads(manifest_path.read_text()).get(
+                    "project_name", name).replace(" ", "-").lower()
+            except json.JSONDecodeError:
+                pass
+        self.log(f"[P2] creating private GitHub repo '{name}' and pushing baseline...")
+        ok, out, err = sh(
+            f"gh repo create {name} --private --source . --remote origin --push",
+            self.root)
+        if not ok:
+            # repo name may already exist on the account — try attach+push
+            ok2, _, _ = sh(
+                f"gh repo view {name} >/dev/null 2>&1 && "
+                f"git remote add origin https://github.com/$({sh('gh api user -q .login', self.root)[1].strip() or 'unknown'}/{name}.git) 2>/dev/null && "
+                f"git push -u origin HEAD --tags", self.root)
+            if not ok2:
+                self.log(f"[P2] repo creation failed: {(out + err).strip()[:300]}")
+                return False
+        ok, out, _ = sh("git push -u origin HEAD --tags", self.root)
+        self.log(f"[P2] remote ready: {out.strip()[:120] if ok else 'push warning'}")
+        return self.has_remote()
 
     # -- stage 1: synthetic user files an issue ---------------------------------
     def explore_and_file_issue(self) -> Optional[int]:
@@ -141,6 +187,8 @@ class Phase2Pipeline:
 
     # -- full pipeline ----------------------------------------------------------------
     def run_once(self) -> MaintenanceResult:
+        if not self.ensure_remote():
+            self.log("[P2] continuing without GitHub (local mode)")
         baseline = count_assertions(self.root / "tests")
         issue = self.explore_and_file_issue()
         if issue is None and self.has_gh():
